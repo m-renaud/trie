@@ -41,7 +41,8 @@ public:
     : root_(), end_()
   {
   }
-  
+
+  void clear()         { root_.edges_.clear(); }
   iterator end() const { return end_; }
   auto insert(value_type const& x) -> std::pair<iterator, bool>;
   auto find(key_type const& key) -> iterator;
