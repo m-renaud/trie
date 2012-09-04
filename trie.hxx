@@ -60,6 +60,8 @@ public:
 
   // Modifiers
   std::pair<iterator,bool> insert(value_type const& x);
+  std::pair<iterator,bool> propogate_insert(value_type const& x);
+  std::pair<iterator,bool> propogate_insert_overwrite(value_type const& x);
   void clear()         { root_.clear(); }
 
   // Observers
@@ -69,7 +71,7 @@ public:
 
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// mrr::trie<Key,T> member functions and inner classes
+// mrr::trie<Key,T> member functions
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 
@@ -77,46 +79,85 @@ public:
 template <typename Key, typename T>
 auto trie<Key,T>::insert(value_type const& x) -> std::pair<iterator, bool>
 {
-  using std::begin;
-  using std::end;
-
   node_type* cur = &root_;
   edge_list_iterator edge;
 
   // Go through each element in the key, creating a path in the tree
   for(auto const& elem : x.first)
-  {
-    edge = cur->edges_.find(elem);
-
-    // If the element in the key doesn't exist, create it, if it does, follow it
-    if(edge == end(cur->edges_))
-    {
-      auto newly_created = &(cur->edges_[elem]);
-      newly_created->parent_ = cur;
-      cur = newly_created;
-    }
-    else
-    {
-      cur = &(edge->second);
-    }
-  }
-
+    cur = &(cur->add_edge(elem));
 
   // If the key already exists, ignore the insert attempt
-  if(cur->final_state_ == true)
+  if(cur->is_final())
   {
     return std::make_pair(iterator(cur), false);
   }
   else
   {
-    cur->value_.first = x.first;
-    cur->value_.second = x.second;
-    cur->final_state_ = true;
+    cur->set_key_and_value(x.first,x.second);
+    cur->final(true);
 
     return std::make_pair(iterator(cur), true);
   }
 
 } // std::pair<iterator, bool> trie<Key,T>::insert()
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+template <typename Key, typename T>
+auto trie<Key,T>::propogate_insert(value_type const& x)
+  -> std::pair<iterator,bool>
+{
+  node_type* cur = &root_;
+  edge_list_iterator edge;
+  key_type sub_key;
+
+  // Go through each element in the key
+  for(auto const& elem : x.first)
+  {
+    // Add the current element to the key substring
+    sub_key.push_back(elem);
+
+    // Move cur to node pointed to by elem
+    cur = &(cur->add_edge(elem));
+
+    // If the current node is not final, make it final and set values
+    if(!cur->is_final())
+    {
+      cur->set_key_and_value(sub_key, x.second);
+      cur->final(true);
+    }
+  }
+
+  return std::make_pair(iterator(cur), !cur->is_final());
+
+}
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+template <typename Key, typename T>
+auto trie<Key,T>::propogate_insert_overwrite(value_type const& x)
+  -> std::pair<iterator,bool>
+{
+  node_type* cur = &root_;
+  edge_list_iterator edge;
+  key_type sub_key;
+
+  // Go through each element in the key
+  for(auto const& elem : x.first)
+  {
+    // Add the current element to the key substring
+    sub_key.push_back(elem);
+
+    // Move cur to node pointed to by elem
+    cur = &(cur->add_edge(elem));
+
+    cur->set_key_and_value(sub_key, x.second);
+    cur->final(true);
+  }
+
+  return std::make_pair(iterator(cur), true);
+
+}
 
 
 
@@ -134,17 +175,17 @@ auto trie<Key,T>::find(key_type const& key) -> iterator
   for(auto const& elem : key)
   {
     // Follow the correct edge
-    auto edge = cur->edges_.find(elem);
+    edge_list_iterator edge = cur->find_edge(elem);
 
     // If the edge is not found, return end_, if it is, follow edge
-    if(edge == end(cur->edges_))
+    if(edge == cur->edge_end())
       return end_;
     else
       cur = &(edge->second);
   }
 
   // If the node we end up at is final, return an iterator to it
-  return (cur->final_state_ == true) ? iterator(cur) : end_;
+  return cur->is_final() ? iterator(cur) : end_;
 
 } // iterator trie<Key,T>::find()
 
@@ -159,6 +200,9 @@ class trie_node
   using node_type = trie_node<Key,T>;
   using edge_type = typename Key::value_type;
   using edge_list_type = std::unordered_map<edge_type, node_type>;
+  using edge_list_iterator = typename edge_list_type::iterator;
+  using key_type = typename trie<Key,T>::key_type;
+  using mapped_type = typename trie<Key,T>::mapped_type;
   using value_type = typename trie<Key,T>::value_type;
 
   edge_list_type edges_;
@@ -179,6 +223,52 @@ public:
   bool empty() const
   {
     return edges_.empty() && (final_state_ == false);
+  }
+
+  node_type& add_edge(typename key_type::value_type const& x)
+  {
+    return edges_[x];
+  }
+
+  edge_list_iterator find_edge(typename key_type::value_type const& x)
+  {
+    return edges_.find(x);
+  }
+
+  edge_list_iterator edge_end()
+  {
+    return end(edges_);
+  }
+
+  bool is_final() const
+  {
+    return final_state_;
+  }
+
+  void final(bool s)
+  {
+    final_state_ = s;
+  }
+
+  void set_key(key_type const& k)
+  {
+    value_.first = k;
+  }
+
+  key_type const& get_key() const
+  {
+    return value_.first;
+  }
+
+  void set_value(mapped_type const& val)
+  {
+    value_.second = val;
+  }
+
+  void set_key_and_value(key_type const& k, mapped_type const& val)
+  {
+    set_key(k);
+    set_value(val);
   }
 
   trie_node<Key,T>* parent_;
