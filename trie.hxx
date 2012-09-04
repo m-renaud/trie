@@ -1,8 +1,9 @@
 #ifndef MRR_TRIE_HXX_
 #define MRR_TRIE_HXX_
 
-#include <map>
 #include <iterator>
+#include <stack>
+#include <unordered_map>
 #include <utility>
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -13,24 +14,33 @@ namespace mrr {
 
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// Prototypes
+template <typename Key, typename T>
+class trie_node;
+
+template <typename Key, typename T>
+class trie_iterator_base;
+
+template <typename Key, typename T>
+class trie_iterator;
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
 class trie
 {
-private:
-  class trie_node;
-  class trie_iterator_base;
-  class trie_iterator;
+  friend class trie_iterator_base<Key,T>;
 
-  using node_type = trie_node;
-  using edge_type = typename node_type::edge_type;
-  using edge_list_type = typename node_type::edge_list_type;
-  using edge_list_iterator = typename edge_list_type::iterator;
-  
 public:
   using key_type = Key;
   using mapped_type = T;
   using value_type = std::pair<Key, T>;
-  using iterator = trie_iterator;
+  using iterator = trie_iterator<Key, T>;
+
+private:
+  using node_type = trie_node<Key,T>;
+  using edge_list_type = typename node_type::edge_list_type;
+  using edge_list_iterator = typename edge_list_type::iterator;
 
 private:
   node_type root_;
@@ -42,10 +52,18 @@ public:
   {
   }
 
-  void clear()         { root_.edges_.clear(); }
+  // Iterators
   iterator end() const { return end_; }
-  auto insert(value_type const& x) -> std::pair<iterator, bool>;
-  auto find(key_type const& key) -> iterator;
+
+  // Capacity
+  bool empty() const   { return root_.empty(); }
+
+  // Modifiers
+  std::pair<iterator,bool> insert(value_type const& x);
+  void clear()         { root_.clear(); }
+
+  // Observers
+  iterator find(key_type const& key);
 
 }; // class trie<Key,T>
 
@@ -61,7 +79,7 @@ auto trie<Key,T>::insert(value_type const& x) -> std::pair<iterator, bool>
 {
   using std::begin;
   using std::end;
-  
+
   node_type* cur = &root_;
   edge_list_iterator edge;
 
@@ -108,7 +126,7 @@ auto trie<Key,T>::find(key_type const& key) -> iterator
 {
   using std::begin;
   using std::end;
-  
+
   // Start at the root
   node_type* cur = &root_;
 
@@ -134,22 +152,36 @@ auto trie<Key,T>::find(key_type const& key) -> iterator
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-class trie<Key,T>::trie_node
+class trie_node
 {
   friend class trie<Key,T>;
-  using edge_type = typename key_type::value_type;
-  using edge_list_type = std::map<edge_type, node_type>;
+
+  using node_type = trie_node<Key,T>;
+  using edge_type = typename Key::value_type;
+  using edge_list_type = std::unordered_map<edge_type, node_type>;
+  using value_type = typename trie<Key,T>::value_type;
 
   edge_list_type edges_;
   bool final_state_;
 
 public:
   trie_node()
-    : edges_(), final_state_(false), parent_(nullptr), value_(value_type())
+    : edges_(), final_state_(false), parent_(nullptr), value_()
   {
   }
 
-  trie_node* parent_;
+  void clear()
+  {
+    edges_.clear();
+  }
+
+  // Sub tree is empty if there are no edges and this is not a final state
+  bool empty() const
+  {
+    return edges_.empty() && (final_state_ == false);
+  }
+
+  trie_node<Key,T>* parent_;
   value_type value_;
 
 }; // class trie<Key,T>::trie_node
@@ -158,12 +190,16 @@ public:
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-class trie<Key,T>::trie_iterator_base
-  : std::iterator<std::forward_iterator_tag, value_type> 
+class trie_iterator_base
+  : std::iterator<std::forward_iterator_tag, T>
 {
-
   friend class trie<Key,T>;
-  
+
+protected:
+  using node_type = typename trie<Key,T>::node_type;
+  using value_type = typename trie<Key,T>::value_type;
+
+
 public:
   bool operator ==(trie_iterator_base const& iter) const
   {
@@ -176,6 +212,11 @@ public:
   }
 
 protected:
+  trie_iterator_base()
+    : node_(nullptr)
+  {
+  }
+
   trie_iterator_base(trie_iterator_base const& iter)
     : node_(iter.node_)
   {
@@ -188,30 +229,23 @@ protected:
 
   node_type* node_;
 
-private:
-  trie_iterator_base()
-    : node_(nullptr)
-  {
-  }
-  
-}; // class trie<Key,T>::trie_iterator_base
+}; // class trie_iterator_base<Key,T>
 
 
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-class trie<Key,T>::trie_iterator
-  : public trie<Key,T>::trie_iterator_base
+class trie_iterator
+  : public trie_iterator_base<Key,T>
 {
-
   friend class trie<Key,T>;
-  
+
+  using value_type = typename trie_iterator_base<Key,T>::value_type;
+  using node_type = typename trie_iterator_base<Key,T>::node_type;
+
 public:
-  trie_iterator()
-    : trie_iterator_base()
-  {
-  }
-  
+  trie_iterator() = default;
+
   trie_iterator& operator =(trie_iterator const& iter)
   {
     this->node_ = iter.node_;
@@ -223,7 +257,7 @@ public:
 
 private:
   explicit trie_iterator(node_type* node)
-    : trie_iterator_base(node)
+    : trie_iterator_base<Key,T>(node)
   {
   }
 

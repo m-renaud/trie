@@ -7,4 +7,5 @@ the current implementation will suffice.
 
 
 # TODO #
-* Move iterator classes outside of the trie class
+* Implement ++ and -- for iterators
+* Allow finding prefix and iterating over all subtrees.
