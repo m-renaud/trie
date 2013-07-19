@@ -3,7 +3,9 @@
 
 #include <iterator>
 #include <map>
+#include <string>
 #include <utility>
+#include <vector>
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -30,10 +32,17 @@ class trie
 {
 	friend class trie_iterator_base<Key,T>;
 
+	using seq_type = typename std::conditional<
+		std::is_same<Key, char>::value,
+		std::string,
+		std::vector<Key>
+	>::type;
+	using seq_iter_type = typename seq_type::const_iterator;
+
 public:
 	using key_type = Key;
 	using mapped_type = T;
-	using value_type = std::pair<const Key, T>;
+	using value_type = std::pair<seq_type, T>;
 	using iterator = trie_iterator<Key, T>;
 
 private:
@@ -57,14 +66,115 @@ public:
 	// Capacity
 	bool empty() const   { return root_.empty(); }
 
-	// Modifiers
-	std::pair<iterator,bool> insert(value_type const& x);
-	std::pair<iterator,bool> propogate_insert(value_type const& x);
-	std::pair<iterator,bool> propogate_insert_overwrite(value_type const& x);
-	void clear()         { root_.clear(); }
 
+	//--------------------------------------------------
+	// Modifiers
+
+	//------------------------------
+	// insert()
+	template <typename Iter>
+	std::pair<iterator,bool> insert(
+		std::pair<std::pair<Iter, Iter>, T> const& x
+	);
+
+	template <typename Container>
+	std::pair<iterator,bool> insert(
+		std::pair<Container, T> const& x
+	);
+
+	auto insert(std::pair<const char*, T> const& x)
+		-> typename std::enable_if<
+			std::is_same<Key, char>::value,
+			std::pair<iterator,bool>
+		>::type
+	{
+		return insert(
+			std::make_pair(
+				std::string(x.first),
+				x.second
+			)
+		);
+	}
+
+
+	//------------------------------
+	// propogate_insert()
+	template <typename Iter>
+	std::pair<iterator,bool> propogate_insert(
+		std::pair<std::pair<Iter, Iter>, T> const& x
+	);
+
+	template <typename Container>
+	std::pair<iterator,bool> propogate_insert(
+		std::pair<Container, T> const& x
+	);
+
+	auto propogate_insert(std::pair<const char*, T> const& x)
+		-> typename std::enable_if<
+			std::is_same<Key, char>::value,
+			std::pair<iterator,bool>
+		>::type
+	{
+		return propogate_insert(
+			std::make_pair(
+				std::string(x.first),
+				x.second
+			)
+		);
+	}
+
+
+	//------------------------------
+	// propogate_insert_overwrite()
+	template <typename Iter>
+	std::pair<iterator,bool> propogate_insert_overwrite(
+		std::pair<std::pair<Iter, Iter>, T> const& x
+	);
+
+	template <typename Container>
+	std::pair<iterator,bool> propogate_insert_overwrite(
+		std::pair<Container, T> const& x
+	);
+
+	auto propogate_insert_overwrite(std::pair<const char*, T> const& x)
+		-> typename std::enable_if<
+			std::is_same<Key, char>::value,
+			std::pair<iterator,bool>
+		>::type
+	{
+		return propogate_insert_overwrite(
+			std::make_pair(
+				std::string(x.first),
+				x.second
+			)
+		);
+	}
+
+
+
+	//------------------------------
+	void clear()
+	{
+		root_.clear();
+	}
+
+
+	//--------------------------------------------------
 	// Observers
-	iterator find(key_type const& key);
+	template <typename Iter>
+	iterator find(Iter begin, Iter end);
+
+	template <typename Container>
+	iterator find(Container const& key);
+
+	auto find(const char* const& str)
+		-> typename std::enable_if<
+			std::is_same<Key, char>::value,
+			iterator
+		>::type
+	{
+		return find(std::string(str));
+	}
 
 }; // class trie<Key,T>
 
@@ -76,8 +186,30 @@ public:
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-auto trie<Key,T>::insert(value_type const& x) -> std::pair<iterator, bool>
+template <typename Iter>
+auto trie<Key,T>::insert(std::pair<std::pair<Iter, Iter>, T> const& x)
+	-> std::pair<iterator,bool>
 {
+	return insert(
+		value_type(
+			seq_type(x.first.first, x.first.second),
+			x.second
+		)
+	);
+}
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+template <typename Key, typename T>
+template <typename Container>
+auto trie<Key,T>::insert(
+	std::pair<Container, T> const& x
+)
+	-> std::pair<iterator, bool>
+{
+	using std::begin;
+	using std::end;
+
 	node_type* cur = &root_;
 	edge_list_iterator edge;
 
@@ -88,26 +220,63 @@ auto trie<Key,T>::insert(value_type const& x) -> std::pair<iterator, bool>
 	// If the key already exists, ignore the insert attempt
 	if(cur->is_final())
 	{
-		return std::make_pair(iterator(cur, x.first), false);
+		return std::make_pair(
+			iterator(cur, seq_type(begin(x.first), end(x.first))),
+			false
+		);
 	}
 	else
 	{
 		cur->set_value(x.second);
 		cur->final(true);
 
-		return std::make_pair(iterator(cur, x.first), true);
+		return std::make_pair(
+			iterator(cur, seq_type(begin(x.first), end(x.first))),
+			true
+		);
 	}
 
 } // std::pair<iterator, bool> trie<Key,T>::insert()
 
 
+
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-auto trie<Key,T>::propogate_insert(value_type const& x)
+template <typename Iter>
+auto trie<Key,T>::propogate_insert(
+	std::pair<std::pair<Iter, Iter>, T> const& x
+)
 	-> std::pair<iterator,bool>
 {
+	return propogate_insert(
+		value_type(
+			seq_type(x.first.first, x.first.second),
+			x.second
+		)
+	);
+}
+
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+template <typename Key, typename T>
+template <typename Container>
+auto trie<Key,T>::propogate_insert(
+	std::pair<Container, T> const& x
+)
+	-> std::pair<iterator,bool>
+{
+	using std::begin;
+	using std::end;
+
 	node_type* cur = &root_;
 	edge_list_iterator edge;
+
+	if(!cur->is_final())
+	{
+		cur->set_value(x.second);
+		cur->final(true);
+	}
 
 	// Go through each element in the key
 	for(auto const& elem : x.first)
@@ -123,18 +292,48 @@ auto trie<Key,T>::propogate_insert(value_type const& x)
 		}
 	}
 
-	return std::make_pair(iterator(cur, x.first), !cur->is_final());
+	return std::make_pair(
+		iterator(cur, seq_type(begin(x.first), end(x.first))),
+		!cur->is_final()
+	);
 
+}
+
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+template <typename Key, typename T>
+template <typename Iter>
+auto trie<Key,T>::propogate_insert_overwrite(
+	std::pair<std::pair<Iter, Iter>, T> const& x
+)
+	-> std::pair<iterator,bool>
+{
+	return propogate_insert_overwrite(
+		value_type(
+			seq_type(x.first.first, x.first.second),
+			x.second
+		)
+	);
 }
 
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-auto trie<Key,T>::propogate_insert_overwrite(value_type const& x)
+template <typename Container>
+auto trie<Key,T>::propogate_insert_overwrite(
+	std::pair<Container, T> const& x
+)
 	-> std::pair<iterator,bool>
 {
+	using std::begin;
+	using std::end;
+
 	node_type* cur = &root_;
 	edge_list_iterator edge;
+
+	cur->set_value(x.second);
+	cur->final(true);
 
 	// Go through each element in the key
 	for(auto const& elem : x.first)
@@ -146,7 +345,10 @@ auto trie<Key,T>::propogate_insert_overwrite(value_type const& x)
 		cur->final(true);
 	}
 
-	return std::make_pair(iterator(cur, x.first), true);
+	return std::make_pair(
+		iterator(cur, seq_type(begin(x.first), end(x.first))),
+		true
+	);
 
 }
 
@@ -154,7 +356,17 @@ auto trie<Key,T>::propogate_insert_overwrite(value_type const& x)
 
 //m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 template <typename Key, typename T>
-auto trie<Key,T>::find(key_type const& key) -> iterator
+template <typename Iter>
+auto trie<Key,T>::find(Iter first, Iter last) -> iterator
+{
+	return find(seq_type(first, last));
+}
+
+
+//m=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+template <typename Key, typename T>
+template <typename Container>
+auto trie<Key,T>::find(Container const& key) -> iterator
 {
 	using std::begin;
 	using std::end;
@@ -176,7 +388,9 @@ auto trie<Key,T>::find(key_type const& key) -> iterator
 	}
 
 	// If the node we end up at is final, return an iterator to it
-	return cur->is_final() ? iterator(cur, key) : end_;
+	return cur->is_final()
+		? iterator(cur, seq_type(begin(key), end(key)))
+		: end_;
 
 } // iterator trie<Key,T>::find()
 
@@ -189,7 +403,7 @@ class trie_node
 	friend class trie<Key,T>;
 
 	using node_type = trie_node<Key,T>;
-	using edge_type = typename Key::value_type;
+	using edge_type = Key;
 	using edge_list_type = std::map<edge_type, node_type>;
 	using edge_list_iterator = typename edge_list_type::iterator;
 	using key_type = typename trie<Key,T>::key_type;
@@ -216,12 +430,12 @@ public:
 		return edges_.empty() && (final_state_ == false);
 	}
 
-	node_type& add_edge(typename key_type::value_type const& x)
+	node_type& add_edge(key_type const& x)
 	{
 		return edges_[x];
 	}
 
-	edge_list_iterator find_edge(typename key_type::value_type const& x)
+	edge_list_iterator find_edge(key_type const& x)
 	{
 		return edges_.find(x);
 	}
@@ -261,10 +475,10 @@ class trie_iterator_base
 	friend class trie<Key,T>;
 
 protected:
+	using seq_type = typename trie<Key,T>::seq_type;
 	using node_type = typename trie<Key,T>::node_type;
 	using key_type = typename trie<Key,T>::key_type;
 	using value_type = typename trie<Key,T>::value_type;
-
 
 public:
 	bool operator ==(trie_iterator_base const& iter) const
@@ -288,13 +502,13 @@ protected:
 	{
 	}
 
-	trie_iterator_base(node_type* node, key_type const& key)
-		: node_(node), value_(std::make_pair(key, node->value_))
+	trie_iterator_base(node_type* node, seq_type const& key_seq)
+		: node_(node), value_(std::make_pair(key_seq, node->value_))
 	{
 	}
 
 	node_type* node_;
-	value_type value_;
+	std::pair<seq_type, T> value_;
 
 }; // class trie_iterator_base<Key,T>
 
@@ -307,6 +521,7 @@ class trie_iterator
 {
 	friend class trie<Key,T>;
 
+	using seq_type = typename trie_iterator_base<Key,T>::seq_type;
 	using node_type = typename trie_iterator_base<Key,T>::node_type;
 	using key_type = typename trie_iterator_base<Key,T>::key_type;
 	using value_type = typename trie_iterator_base<Key,T>::value_type;
@@ -317,12 +532,13 @@ public:
 	trie_iterator& operator =(trie_iterator const& iter)
 	{
 		this->node_ = iter.node_;
+		this->value_ = iter.value_;
 		return *this;
 	}
 
 	value_type& operator*()
 	{
-		return std::make_pair(this->key_, this->node_->value_);
+		return this->value_;
 	}
 
 	value_type* operator->()
@@ -331,8 +547,8 @@ public:
 	}
 
 private:
-	explicit trie_iterator(node_type* node, key_type const& key)
-		: trie_iterator_base<Key,T>(node, key)
+	explicit trie_iterator(node_type* node, seq_type const& key_seq)
+		: trie_iterator_base<Key,T>(node, key_seq)
 	{
 	}
 
